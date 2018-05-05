@@ -103,7 +103,7 @@ class ChainMRFPotentials:
         return np.array(self._potentials1)
 
     def return_binary(self):
-        return np.array(self._potentials2[self._n:])
+        return np.array(self._potentials2)
 
 
 class SumProduct:
@@ -113,56 +113,57 @@ class SumProduct:
         # add whatever data structures needed
 
         # since our way requires us to get a whole row or matrix at a time, we are changing stuff up
-        uniary = self._potentials.return_uniary()
-        binary = np.array(self._potentials._potentials2)
-        print(self._potentials.return_binary())
-        print(binary[self._potentials.chain_length() + 1:])
+        self.uniary = self._potentials.return_uniary()
+        self.binary = self._potentials.return_binary()
 
-        # FORWARD PASS + BACKWARD PASS AT THE SAME TIME
-        # stores all mus from forward pass, each mu is a row vector
         self.n = self._potentials.chain_length()
         self.k = self._potentials.num_x_values()
 
+        # stores all mus from forward pass, each mu is a row vector
         self.forward_messages = np.zeros((self._potentials.chain_length() - 1, self._potentials.num_x_values()))
         self.backward_messages = np.zeros((self._potentials.chain_length() - 1, self._potentials.num_x_values()))
 
         # need to do a base case
-        self.forward_messages[0, :] = np.dot(uniary[1, 1:], binary[self.n + 1, 1:, 1:])
-        self.backward_messages[0, :] = np.dot(binary[2 * self.n - 1, 1:, 1:], uniary[self.n, 1:].T).T
+        self.forward_messages[0, :] = np.dot(self.uniary[1, 1:], self.binary[self.n + 1, 1:, 1:])
+        self.backward_messages[0, :] = np.dot(self.binary[2 * self.n - 1, 1:, 1:], self.uniary[self.n, 1:].T).T
 
-        prob_forward = np.multiply(self.forward_messages[0, :], uniary[2, 1:])
-        prob_backward = np.multiply(uniary[self.n - 1, 1:], self.backward_messages[0, :])
+        prob_forward = np.multiply(self.forward_messages[0, :], self.uniary[2, 1:])
+        prob_backward = np.multiply(self.uniary[self.n - 1, 1:], self.backward_messages[0, :])
 
+        # FORWARD PASS + BACKWARD PASS AT THE SAME TIME
         for i in range(1, self.n - 1):
             # FORWARD PASS
             # at the ith row, insert the message which is just a dot product of p(xi), and p(x1+1| xi)
-            self.forward_messages[i, :] = np.dot(prob_forward, binary[self.n+i+1, 1:,1:])
-            prob_forward = np.multiply(self.forward_messages[i, :], uniary[i+2, 1:])
+            self.forward_messages[i, :] = np.dot(prob_forward, self.binary[self.n+i+1, 1:,1:])
+            prob_forward = np.multiply(self.forward_messages[i, :], self.uniary[i+2, 1:])
 
             # BACKWARD PASS
-            self.backward_messages[i, :] = np.dot(binary[2 * self.n - (1+i), 1:,1:], prob_backward.T).T
-            prob_backward = np.multiply(uniary[self.n - i - 1, 1:], self.backward_messages[i, :])
+            self.backward_messages[i, :] = np.dot(self.binary[2 * self.n - (1+i), 1:,1:], prob_backward.T).T
+            prob_backward = np.multiply(self.uniary[self.n - i - 1, 1:], self.backward_messages[i, :])
 
         # SAVE THE LAST AND FIRST NODE PROBS BC THEY ARE SPECIAL
         self.last_node_prob = np.divide(prob_forward, np.sum(prob_forward))
         self.first_node_prob = np.divide(prob_backward, np.sum(prob_backward))
 
-        print(self.last_node_prob)
-        print(self.first_node_prob)
-
     def marginal_probability(self, x_i):
         """
-        :param x_i: The node we are trying to find the marginal probability of
-        :return: a float list, length k=k+1
+        :param x_i: The node we are trying to find the marginal probability of - an int
+        :return: return a python list of type float, with its length=k+1, and the first value 0
         """
-        # TODO: EDIT HERE
-        # should return a python list of type float, with its length=k+1, and the first value 0
-
-        # This code is used for testing only and should be removed in your implementation.
-        # It creates a uniform distribution, leaving the first position 0
-        result = [1.0 / (self._potentials.num_x_values())] * (self._potentials.num_x_values() + 1)
-        result[0] = 0
-        return result
+        # have to make it one bigger
+        result = np.zeros((1, self.k + 1))
+        # if first node
+        if x_i == 1:
+            result[0, 1:] = self.first_node_prob
+        # if last node
+        elif x_i == self.n:
+            result[0, 1:] = self.last_node_prob
+        # if any node in the middle
+        else:
+            result[0, 1:] = np.multiply(self.uniary[x_i,1:], self.forward_messages[x_i - 2, :])
+            result[0, 1:] = np.multiply(result[0, 1:], self.backward_messages[self.n - 1 - x_i, :])
+            result[0, 1:] = np.divide(result[0, 1:], np.sum(result[0, 1:]))
+        return result[0].tolist()
 
 
 class MaxSum:

@@ -1,0 +1,1 @@
+python chain_mrf_tester.py sample_mrf_potentials.txt
