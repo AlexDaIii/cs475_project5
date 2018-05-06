@@ -129,8 +129,7 @@ class SumProduct:
         self.first_node_prob = None
 
         # now calculate the messages
-        prob_forward, prob_backward = self.calculate_msg()
-        self.font_and_back_prob(prob_forward, prob_backward)
+        self.calculate_msg()
 
     def calculate_msg(self):
         """
@@ -155,20 +154,11 @@ class SumProduct:
             self.backward_messages[i, :] = np.dot(self.binary[2 * self.n - (1 + i), 1:, 1:], prob_backward.T).T
             prob_backward = np.multiply(self.uniary[self.n - i - 1, 1:], self.backward_messages[i, :])
 
-        return prob_forward, prob_backward
-
-    def font_and_back_prob(self, prob_forward, prob_backward):
-        """
-        Calculate the front and back probabilities
-        :param prob_forward: the forward unnormalized probability
-        :param prob_backward: the backward unnormalized probability
-        """
         # store these for the max sum algorithm
         self.z = np.sum(prob_forward)
         # SAVE THE LAST AND FIRST NODE PROBS BC THEY ARE SPECIAL
         self.last_node_prob = np.divide(prob_forward, self.z)
         self.first_node_prob = np.divide(prob_backward, self.z)
-        pass
 
     def marginal_probability(self, x_i):
         """
@@ -196,62 +186,49 @@ class MaxSum(SumProduct):
         super().__init__(p)
 
         self._potentials = p
-        self._assignments = [0] * (p.chain_length() + 1)
+        self._assignments = np.zeros((1, self.n + 1))
+
         # TODO: EDIT HERE
         # add whatever data structures needed
-        # this is just to get the Zs
-
-        self.forward_messages_max = np.zeros((self.n + 1, self.k))
-        self.backward_messages_max = np.zeros((self.n + 1, self.k))
-        self.max_values = np.zeros(self.n + 1)
+        self.forward_messages_max = np.zeros((self.n, self.k))
+        self.backward_messages_max = np.zeros((self.n, self.k))
+        self.max_values = None
 
         self.calculate_msg_max()
+        self.assign_values()
 
     def calculate_msg_max(self):
         """
         A function exists bc of a failure of my oop skills
         """
 
-        # FORWARD PASS
-        # loops through the things in the uniary - horiz
-        for num_node in range(1, self.n + 1):
-            # loops through the things in the binary
-            for k in range(1, self.k + 1):
-                if num_node == 1:
-                    self.forward_messages_max[num_node, k-1] = 0
-                else:
-                    pre1 = self.forward_messages_max[num_node - 1, :]
-                    pre2 = pre1 + np.log(self.binary[self.n + num_node - 1, 1:, k])
-                    pre3 = pre2 + np.log(self.uniary[num_node - 1, 1:])
-                    self.forward_messages_max[num_node, k-1] = np.max(pre3)
+        pre1 = np.zeros((self.k, 1))
+        post1 = np.zeros((self.k, 1))
 
-        for num_node in range(self.n, 0, -1):
+        for i in range(1, self.n):
+            # FORWARD PASS
+            pre1[:, 0] = self.forward_messages_max[i-1, :]
+            pre2 = (pre1 + np.log(self.binary[self.n + i, 1:, 1:])).T + np.log(self.uniary[i, 1:])
+            self.forward_messages_max[i, :] = np.max(pre2, axis=1)
 
-            for k in range(1, self.k +1):
-                if num_node == self.n:
-                    self.backward_messages_max[num_node, k-1] = 0
-                else:
-                    post1 = self.backward_messages_max[num_node + 1, :]
-                    post2 = post1 + np.log(self.uniary[num_node + 1, 1:])
-                    post3 = post2 + np.log(self.binary[self.n + num_node, k, 1:])
-                    self.backward_messages_max[num_node, k-1] = np.max(post3)
+            # BACKWARD PASS
+            post1[:, 0] = self.backward_messages_max[self.n - i]
+            post2 = post1.T + np.log(self.uniary[self.n - i + 1, 1:]) + np.log(self.binary[2 * self.n - i, 1:, 1:])
+            self.backward_messages_max[self.n - i - 1, :] = np.max(post2, axis=1)
+        pass
 
-        for i in range(1, self.n+1):
-            total = self.backward_messages_max[i, :] + self.forward_messages_max[i, :] + np.log(self.uniary[i, 1:])
-            self._assignments[i] = np.argmax(total) + 1
-            self.max_values[i] = np.max(total) - np.log(self.z)
-
-        # this is the fi the message from factor to xi
-        #fi[0, :] = np.log(self.uniary[self.n, 1:])
-
-        # normalize it with z
-        #self.log_prob = fi - np.log(self.z)
-        # print(np.max(self.log_prob))
-        #assignment = np.argmax(self.log_prob)
+    def assign_values(self):
+        """
+        This does the argmax and does assignments
+        """
+        total = self.backward_messages_max + self.forward_messages_max + np.log(self.uniary[1:, 1:])
+        self._assignments[0, 1:] = np.argmax(total, axis=1) + 1
+        self.max_values = np.max(total) - np.log(self.z)
+        pass
 
     def get_assignments(self):
-        return self._assignments
+        return self._assignments[0].astype(int).tolist()
 
     def max_probability(self, x_i):
         # TODO: EDIT HERE
-        return np.max(self.max_values[x_i])
+        return self.max_values

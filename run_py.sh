@@ -1,1 +1,1 @@
-python chain_mrf_tester.py sample_mrf_potentials.txt
+python chain_mrf_tester.py sample_mrf_potentials.txt | java Foo
